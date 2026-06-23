@@ -1,4 +1,3 @@
-
 -- =========================================================
 -- PROFILES
 -- =========================================================
@@ -18,11 +17,11 @@ GRANT ALL ON public.profiles TO service_role;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Public-safe columns are exposed via a view below; the table policy still
--- allows row reads, but the app should select only safe columns for non-owners.
-CREATE POLICY "Profiles are viewable by everyone"
-  ON public.profiles FOR SELECT
-  USING (true);
+CREATE POLICY "Users can view their own profile"
+  ON public.profiles
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = id);
 
 CREATE POLICY "Users can insert their own profile"
   ON public.profiles FOR INSERT
@@ -37,6 +36,21 @@ CREATE POLICY "Users can delete their own profile"
   ON public.profiles FOR DELETE
   USING (auth.uid() = id);
 
+-- Allow anon to SELECT rows from profiles, but only the safe columns
+CREATE POLICY "Public can read non-sensitive profile fields"
+  ON public.profiles
+  FOR SELECT
+  TO anon
+  USING (true);
+
+-- Column-level grants: anon may only read safe columns (email excluded)
+REVOKE ALL ON public.profiles FROM anon;
+GRANT SELECT (id, display_name, country, favorite_team_id, created_at)
+  ON public.profiles TO anon;
+
+-- Authenticated keeps full access to their own row via the owner policy
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+
 -- =========================================================
 -- updated_at trigger helper
 -- =========================================================
@@ -50,6 +64,8 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM PUBLIC, anon, authenticated;
 
 CREATE TRIGGER profiles_set_updated_at
   BEFORE UPDATE ON public.profiles
@@ -77,9 +93,21 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- =========================================================
+-- Email-free public view for community/leaderboard features
+-- =========================================================
+CREATE VIEW public.public_profiles
+WITH (security_invoker = true) AS
+SELECT id, display_name, country, favorite_team_id, created_at
+FROM public.profiles;
+
+GRANT SELECT ON public.public_profiles TO anon, authenticated;
 
 -- =========================================================
 -- COMPETITIONS
@@ -243,7 +271,8 @@ CREATE INDEX scorers_goals_idx ON public.scorers(goals DESC);
 -- =========================================================
 -- TEAM FAN COUNTS VIEW
 -- =========================================================
-CREATE OR REPLACE VIEW public.team_fan_counts AS
+CREATE OR REPLACE VIEW public.team_fan_counts
+WITH (security_invoker = true) AS
 SELECT
   t.id           AS team_id,
   t.name         AS team_name,
