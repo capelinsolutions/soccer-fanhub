@@ -1,9 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import type {
-  ApiMatch,
-  ApiMatchStatus,
-  ScheduleResult,
-} from "./football-types";
+import type { ApiMatch, ApiMatchStatus, ScheduleResult } from "./football-types";
 
 const BASE = "https://api.football-data.org/v4";
 const COMPETITION = "WC";
@@ -178,10 +174,7 @@ export const getSchedule = createServerFn({ method: "GET" }).handler(
   async (): Promise<ScheduleResult> => {
     try {
       const { getAllMatches, getWcTeams } = await import("./football-cache.server");
-      const [teamsRes, matchesRes] = await Promise.all([
-        getWcTeams(),
-        getAllMatches(),
-      ]);
+      const [teamsRes, matchesRes] = await Promise.all([getWcTeams(), getAllMatches()]);
       const teamById = new Map<number, any>();
       for (const t of teamsRes.data ?? []) teamById.set(t.id, t);
       const matches: ApiMatch[] = (matchesRes.data ?? []).map((m: any) => {
@@ -231,10 +224,7 @@ export const getLiveMatches = createServerFn({ method: "GET" }).handler(
   async (): Promise<ScheduleResult> => {
     try {
       const { getLiveMatchesRaw, getWcTeams } = await import("./football-cache.server");
-      const [teamsRes, liveRes] = await Promise.all([
-        getWcTeams(),
-        getLiveMatchesRaw(),
-      ]);
+      const [teamsRes, liveRes] = await Promise.all([getWcTeams(), getLiveMatchesRaw()]);
       const teamById = new Map<number, any>();
       for (const t of teamsRes.data ?? []) teamById.set(t.id, t);
       const matches: ApiMatch[] = (liveRes.data ?? []).map((m: any) => {
@@ -270,9 +260,7 @@ export const getLiveMatches = createServerFn({ method: "GET" }).handler(
       };
     } catch (e) {
       const reason = (e as any)?.reason ?? "ERROR";
-      const live = mockFallback().filter((m) =>
-        ["LIVE", "IN_PLAY", "PAUSED"].includes(m.status),
-      );
+      const live = mockFallback().filter((m) => ["LIVE", "IN_PLAY", "PAUSED"].includes(m.status));
       return {
         matches: live,
         source: "mock",
@@ -284,7 +272,7 @@ export const getLiveMatches = createServerFn({ method: "GET" }).handler(
 );
 
 export const getMatchById = createServerFn({ method: "GET" })
-  .inputValidator((input: { id: string }) => {
+  .validator((input: { id: string }) => {
     if (!input?.id) throw new Error("id required");
     return { id: String(input.id) };
   })
@@ -297,9 +285,7 @@ export const getMatchById = createServerFn({ method: "GET" })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { match?: RawMatch } | RawMatch;
-      const raw =
-        ((json as { match?: RawMatch }).match as RawMatch) ??
-        (json as RawMatch);
+      const raw = ((json as { match?: RawMatch }).match as RawMatch) ?? (json as RawMatch);
       if (!raw?.id) return null;
       return normalize(raw);
     } catch {
